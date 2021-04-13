@@ -29,6 +29,7 @@ static void *memdup(const void *src, size_t n) {
 	return dest;
 }
 
+// take from https://www.nayuki.io/page/free-small-fft-in-multiple-languages
 bool Fft_transformRadix2(double complex *vec, size_t n, bool inverse) {
 	// Length variables
 	int levels = 0;  // Compute levels = floor(log2(n))
