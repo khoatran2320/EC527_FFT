@@ -24,7 +24,9 @@ static size_t reverse_bits(size_t val, int width) {
 
 bool Fft_transformRadix2(double complex *vec, size_t n, bool inverse) {
 	// Length variables
-	int levels = 0;  // Compute levels = floor(log2(n))
+	int levels = 0;  
+
+	//determine the number of stages in the DIT (log2(n))
 	for (size_t temp = n; temp > 1U; temp >>= 1)
 		levels++;
 	if ((size_t)1U << levels != n)
@@ -33,6 +35,8 @@ bool Fft_transformRadix2(double complex *vec, size_t n, bool inverse) {
 	// Trigonometric tables
 	if (SIZE_MAX / sizeof(double complex) < n / 2)
 		return false;
+	
+	//set up the table [W^0, W^1, W^2, ..., W^(n/2 - 1)] where W = e^(-2*pi*i/n) for forward fft and W = e^(2*pi*i/n) for inverse fft
 	double complex *exptable = malloc((n / 2) * sizeof(double complex));
 	if (exptable == NULL)
 		return false;
@@ -40,6 +44,12 @@ bool Fft_transformRadix2(double complex *vec, size_t n, bool inverse) {
 		exptable[i] = cexp((inverse ? 2 : -2) * M_PI * i / n * I);
 	
 	// Bit-reversed addressing permutation
+	// 000 => 000
+	// 001 => 100
+	// 010 => 010
+	// 011 => 110
+	// ...
+	// for n=8: [a0, a1, a2, a3, a4, a5, a6, a7] => [a0, a4, a2, a6, a1, a5, a2, a7]
 	for (size_t i = 0; i < n; i++) {
 		size_t j = reverse_bits(i, levels);
 		if (j > i) {
@@ -50,10 +60,15 @@ bool Fft_transformRadix2(double complex *vec, size_t n, bool inverse) {
 	}
 	
 	// Cooley-Tukey decimation-in-time radix-2 FFT
+	// loop through each stage
 	for (size_t size = 2; size <= n; size *= 2) {														
 		size_t halfsize = size / 2;																			
-		size_t tablestep = n / size;																	
-		for (size_t i = 0; i < n; i += size) {																
+		size_t tablestep = n / size;		
+
+		//for each stage, compute butterly for 2 outputs in groups of 2, 4, 8, ...															
+		for (size_t i = 0; i < n; i += size) {	
+				
+			// compute butterfly (2 outputs)														
 			for (size_t j = i, k = 0; j < i + halfsize; j++, k += tablestep) {							
 				size_t l = j + halfsize;																	
 				double complex temp = vec[l] * exptable[k];													
