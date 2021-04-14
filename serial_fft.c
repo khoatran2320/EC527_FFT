@@ -7,7 +7,7 @@
 #include <stddef.h>
 #include <stdio.h>
 
-// #define M_PI 3.14159265358979323846
+#define M_PI 3.14159265358979323846
 
 
 #define SIZE 1<<6
@@ -22,14 +22,6 @@ static size_t reverse_bits(size_t val, int width) {
 }
 
 
-static void *memdup(const void *src, size_t n) {
-	void *dest = malloc(n);
-	if (n > 0 && dest != NULL)
-		memcpy(dest, src, n);
-	return dest;
-}
-
-// take from https://www.nayuki.io/page/free-small-fft-in-multiple-languages
 bool Fft_transformRadix2(double complex *vec, size_t n, bool inverse) {
 	// Length variables
 	int levels = 0;  // Compute levels = floor(log2(n))
@@ -58,13 +50,13 @@ bool Fft_transformRadix2(double complex *vec, size_t n, bool inverse) {
 	}
 	
 	// Cooley-Tukey decimation-in-time radix-2 FFT
-	for (size_t size = 2; size <= n; size *= 2) {
-		size_t halfsize = size / 2;
-		size_t tablestep = n / size;
-		for (size_t i = 0; i < n; i += size) {
-			for (size_t j = i, k = 0; j < i + halfsize; j++, k += tablestep) {
-				size_t l = j + halfsize;
-				double complex temp = vec[l] * exptable[k];
+	for (size_t size = 2; size <= n; size *= 2) {														
+		size_t halfsize = size / 2;																			
+		size_t tablestep = n / size;																	
+		for (size_t i = 0; i < n; i += size) {																
+			for (size_t j = i, k = 0; j < i + halfsize; j++, k += tablestep) {							
+				size_t l = j + halfsize;																	
+				double complex temp = vec[l] * exptable[k];													
 				vec[l] = vec[j] - temp;
 				vec[j] += temp;
 			}
@@ -116,20 +108,20 @@ int main(int argc, char **argv){
     generate_sin_points_c(inp, SIZE, SAMPLING_RATE, FREQUENCY);
     DFT(in, out, SIZE);
 
-    for(int i = 0; i < SIZE; ++i){
-        printf("%.2lf j%.2lf   ", creal(in[i]), cimag(in[i]));
-    }
-    printf("\n");
-    printf("\n");
-    for(int i = 0; i < SIZE; ++i){
-        printf("%.2lf j%.2lf   ", creal(out[i]), cimag(out[i]));
-    }
-    printf("\n");
+    // for(int i = 0; i < SIZE; ++i){
+    //     printf("%.2lf j%.2lf   ", creal(in[i]), cimag(in[i]));
+    // }
+    // printf("\n");
+    // printf("\n");
+    // for(int i = 0; i < SIZE; ++i){
+    //     printf("%.2lf j%.2lf   ", creal(out[i]), cimag(out[i]));
+    // }
+    // printf("\n");
 
     bool ret = Fft_transformRadix2(inp, SIZE, 0);
-    printf("\n");
-    for(int i = 0; i < SIZE; ++i){
-        printf("%.2lf j%.2lf   ", creal(inp[i]), cimag(inp[i]));
-    }
-    printf("\n");
+    // printf("\n");
+    // for(int i = 0; i < SIZE; ++i){
+    //     printf("%.2lf j%.2lf   ", creal(inp[i]), cimag(inp[i]));
+    // }
+    // printf("\n");
 }
