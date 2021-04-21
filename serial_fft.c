@@ -14,7 +14,7 @@
 #define M_PI 3.14159265358979323846
 
 
-#define SIZE 8 //Change back to 1<<6
+#define SIZE 8192 //Change back to 1<<6
 #define SAMPLING_RATE 100
 #define FREQUENCY 2
 
@@ -199,8 +199,6 @@ int main(int argc, char **argv){
     double complex *inp = (double complex *)malloc(sizeof(double complex) * SIZE * SIZE );
     double complex *out = (double complex *)malloc(sizeof(double complex) * SIZE * SIZE);
 
-	struct timespec time_start, time_stop;
-
     //generate_sin_points_c(in, SIZE * SIZE, SAMPLING_RATE, FREQUENCY);
     //generate_sin_points_c(inp, SIZE * SIZE, SAMPLING_RATE, FREQUENCY);
     
@@ -213,6 +211,7 @@ int main(int argc, char **argv){
     int i, j;
 	size_t n = SIZE;
 
+	/*
     for(i = 0; i < n; i++){
 		for (j = 0; j < n; j++){
 			//printf("i is: %d, j is %d... ", i, j);
@@ -221,6 +220,7 @@ int main(int argc, char **argv){
 		printf("\n");
 		//printf("%.2lf j%.2lf  ", creal(in[i]), cimag(in[i]));
     }
+	*/
 
     printf("\n");
     printf("\n");
@@ -250,16 +250,19 @@ int main(int argc, char **argv){
 
 	// //For 2D, need to do FFT, then transpose, then do FFT again, then transpose back.
     
-	
+	printf("Starting now\n");
+	struct timespec time_start, time_stop;
 	clock_gettime(CLOCK_PROCESS_CPUTIME_ID, &time_start);
 	bool ret = Fft_transformRadix2(inp, SIZE, inverse, exptable);
 	transpose_matrix(inp, SIZE);
 	ret = Fft_transformRadix2(inp, SIZE, inverse, exptable);
 	transpose_matrix(inp, SIZE);
 	clock_gettime(CLOCK_PROCESS_CPUTIME_ID, &time_stop);
+	printf("Finishing now\n");
 
     printf("\n");
     
+	/*
     if (ret){
       for(i = 0; i < SIZE; ++i){
 		  for (j = 0; j < SIZE; ++j){
@@ -272,6 +275,7 @@ int main(int argc, char **argv){
     else{
       printf("There was an error with your input\n");
     }
+	*/
 
     printf("\n");
 	printf("Time for FFT was: %.9f\n\n", interval(time_start, time_stop));
