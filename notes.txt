@@ -1,0 +1,39 @@
+
+
+
+
+Butterfly effect
+	
+	8 inputs, x[0] through x[7]
+	8 outputs, X[0] through X[7]
+
+	x[0] and x[1] 
+	x[2] and x[3]
+
+	x[0] and x[0]
+
+
+
+
+1. Do 1D fft on matrix row by row (m)
+2. Do transpose of matrix, 
+3. Do 1D FFT on transpose
+4. Transpose back 
+
+
+For each row, shift numbers around inside row
+
+Bit-reversing to shift
+
+Levels 2, 4, and 8
+
+How many levels tell you how many bits there are
+
+
+Ex. 1024, 2^10, ten levels, 11 binary 
+
+	for (temp = n; temp > 1U; temp >>= 1)
+		levels++;
+
+(j > i) swap 1 to 4, don't want to repeat and swap 4 to 1
+	 
