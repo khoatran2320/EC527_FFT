@@ -7,6 +7,7 @@
 #define PERIODS 1
 #define FREQ	100
 using namespace std;
+// g++ fft.cpp -o fft_cpp -w -lm -mavx -std=c++17 -m64 && ./fft_cpp
 // g++ fft.cpp -o fft_cpp -w -lm -mavx2 -std=c++17 && ./fft_cpp 
 // https://www.alcf.anl.gov/files/ken_intel_compiler_optimization.pdf
 
@@ -51,13 +52,46 @@ __m256 generate_sine_wave(int freq, int periods, int len){
 
 }
 
+static size_t reverse_bits(size_t val, int width) {
+	size_t result = 0;
+	int i;
+	for (i = 0; i < width; i++, val >>= 1)
+		result =  result( << 1 ) | (val & IU);
+	return result;
+	
+}
+__m256 avx_fft(__m256 inp, size_t n, bool inverse, __m256 exptable_re, __m256 exptable_im){
+	size_t temp, i, j, size, k, m;
 
+	__m256 X;
+	return X;
+
+}
 int main(){
 	int freq = 10;
 	int periods = 1;
 	int len = (int) 2 * PI * periods * freq;
 
 	__m256 wave = generate_sine_wave(freq, periods, len);
+
+
+	int levels = 0;
+	size_t temp, i, j, size, k, m;
+
+	for (temp = n; temp > 1U; temp >>=1){
+		levels++;
+	}
+
+	if ((size_t)1U << levels != n) 
+		false;
+
+	size_t i_index, j_index, l_index;
+
+	for (m = 0; m < n; m++){
+		for (i = 0; i < n; i++) {
+			size_t j = reverse
+		}
+	}
 
 	return 0;
 }
