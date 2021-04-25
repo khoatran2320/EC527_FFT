@@ -90,11 +90,18 @@ int main(){
 
 	float * fWave = new (std::align_val_t(32)) float[len];
 
+	__m256 entry;
+
+	//float ytest[3] = {0};
+	float * ytest = new (std::align_val_t(32)) float[3];	
+
+
+
 //	_mm256_store_ps(fWave, y);
-	for (int i = 0; i < len; i++) 
+	for (int i = 0; i < 3; i++) 
 			{
 				//cout << ((float)i)/freq << " : " << fWave[i] << endl;
-				cout << y[i] << endl;
+
 		
 	}
 	cout << endl;
