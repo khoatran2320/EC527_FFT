@@ -1,3 +1,4 @@
+
 #include <math.h>
 #include <iostream>
 #include <complex>
@@ -8,8 +9,7 @@
 #define FREQ	100
 using namespace std;
 
-
-int main(){
+void proof_of_concept(){	
 	int freq = 10;
 	int periods = 1;
 	int len = (int) 2 * PI * periods * freq;
@@ -47,6 +47,4 @@ int main(){
 
 	_mm256_store_ps(d_float, blocks[0]);
 	for (int i = 0; i < 8; i++) cout << d_float[i] << endl;
-
-	return 0;
 }
