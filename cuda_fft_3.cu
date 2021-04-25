@@ -21,8 +21,8 @@
 
 #define TILE_WIDTH 32
 #define SIZE 8192
-#define BLOCK_SIZE (SIZE / 8)
-#define NUM_BLOCKS 8
+#define BLOCK_SIZE (SIZE / 8192)
+#define NUM_BLOCKS 8192
 #define SAMPLING_RATE 100
 #define FREQUENCY 2
 
@@ -56,23 +56,18 @@ inline void gpuAssert(cudaError_t code, char *file, int line, bool abort=true)
 }
 
 //My CUDA function for global FFT that works on entire matrix
-__global__ void kernel_FFT (int rowlen, cuDoubleComplex * exptable, cuDoubleComplex * fft_matrix) {
+__global__ void kernel_FFT (int rowlen, cuDoubleComplex * exptable, cuDoubleComplex * fft_matrix, int num_per_thread_y) {
   
     int levels = 0;
     cuDoubleComplex temp;
     int i, j, k, l, m, size;
     int val;
+    int start_of_thread = num_per_thread_y*threadIdx.y;
 
 	for (i = rowlen; i > 1U; i >>= 1)
 		levels++;
 	
 	// Bit-reversed addressing permutation
-	// 000 => 000
-	// 001 => 100
-	// 010 => 010
-	// 011 => 110
-	// ...
-	// for n=8: [a0, a1, a2, a3, a4, a5, a6, a7] => [a0, a4, a2, a6, a1, a5, a3, a7]
 	int i_index;
 	int j_index;
 	int l_index;
@@ -83,7 +78,7 @@ __global__ void kernel_FFT (int rowlen, cuDoubleComplex * exptable, cuDoubleComp
 
 
     /* Swap the vector elements */
-    for (i = 0; i < rowlen; i++) {
+    for (i = start_of_thread; i < start_of_thread + num_per_thread_y; i++) {
         val = i;
         j = 0;
         for (k = 0; k < levels; k++, val >>= 1)
@@ -92,32 +87,45 @@ __global__ void kernel_FFT (int rowlen, cuDoubleComplex * exptable, cuDoubleComp
         if (j > i) {
             i_index = stride + i;
             j_index = stride + j;
-            //printf("Row %d i_index = %d, j_index = %d\n", row, i_index, j_index);
-            //printf("Row %d fft_matrix[i(%d)] = %.2lf j%.2lf & fft_matrix[j(%d)] = %.2lf j%.2lf\n", row, i, cuCreal(fft_matrix[i_index]), cuCimag(fft_matrix[i_index]), j, cuCreal(fft_matrix[j_index]), cuCimag(fft_matrix[j_index]));
             cuDoubleComplex temp = fft_matrix[i_index];
             fft_matrix[i_index] = fft_matrix[j_index];
             fft_matrix[j_index] = temp;
-            //printf("Afterwards: Row %d fft_matrix[i(%d)] = %.2lf j%.2lf & fft_matrix[j(%d)] = %.2lf j%.2lf\n", row, i, cuCreal(fft_matrix[i_index]), cuCimag(fft_matrix[i_index]), j, cuCreal(fft_matrix[j_index]), cuCimag(fft_matrix[j_index]));
         }
     }
+    __syncthreads();
     
     // Cooley-Tukey decimation-in-time radix-2 FFT
     // loop through each stage
 
-    for (size = 2; size <= rowlen; size *= 2) {														
+    for (size = 2; size <= rowlen; size *= 2) {
+
+        __syncthreads();
+
         int halfsize = size / 2;																			
         int tablestep = rowlen / size;		
+        bool skipped = 0;
 
-        //for each stage, compute butterly for 2 outputs in groups of 2, 4, 8, ...															
-        for (i = 0; i < rowlen; i += size) {	
-            // compute butterfly (2 outputs)														
+        //for each stage, compute butterly for 2 outputs in groups of 2, 4, 8, ...
 
-            for (j = i, k = 0; j < i + halfsize; j++, k += tablestep) {
+        if ( (halfsize >= num_per_thread_y) && ( (start_of_thread/halfsize) % 2) ) //If halfsize is larger than a thread, if the start of current thread is the second half of a butterfly, just ignore it for this iteration
+        {
+          continue;
+        }
+
+
+        for (i = start_of_thread; i < start_of_thread + num_per_thread_y; i+=size) {
+
+            k = (i % halfsize) * tablestep; //If start of thread is in middle of a halfsize, k should be set accordingly.
+
+            for (j = i; (j < i + halfsize && j < start_of_thread + num_per_thread_y) ; j++, k += tablestep) {   // Keep going until you either exceed the halfsize or you cross into next thread (for when halfsize is larger than thread size)
                 int l = j + halfsize;
+
                 j_index = (stride) + j;
                 l_index = (stride) + l;									
+                
+                //printf("Row %d, thread %d: j = %d l = %d. j_index = %d, l_index = %d\n", row, threadIdx.y, j, l, j_index, l_index);
+                
                 temp = cuCmul( fft_matrix[l_index] , exptable[k]);
-                //printf("Multiplication result is: %.2lf j%.2lf ", cuCreal(temp), cuCimag(temp));
                 fft_matrix[l_index] = cuCsub(fft_matrix[j_index], temp);
                 fft_matrix[j_index] = cuCadd(fft_matrix[j_index], temp);
             }
@@ -126,6 +134,7 @@ __global__ void kernel_FFT (int rowlen, cuDoubleComplex * exptable, cuDoubleComp
                 break;
         }
     }
+    __syncthreads();
 }
 
 
@@ -135,23 +144,18 @@ __global__ void kernel_FFT (int rowlen, cuDoubleComplex * exptable, cuDoubleComp
 
 
 //My CUDA function for matrix transpose (in place)
-__global__ void kernel_InPlaceTranspose (int rowlen, cuDoubleComplex * transpose_matrix) {
+//Taken from https://developer.nvidia.com/blog/efficient-matrix-transpose-cuda-cc/
+__global__ void kernel_Transpose (int rowlen, cuDoubleComplex * in_matrix, cuDoubleComplex * out_matrix) {
 
-    int col = blockIdx.x * (rowlen / gridDim.x) + threadIdx.x;
-    int i;
-    cuDoubleComplex temp;
+    __shared__ cuDoubleComplex tile[TILE_WIDTH][TILE_WIDTH];
 
-    int row_index;
-    int col_index;
+    int col = blockIdx.x * TILE_WIDTH + threadIdx.x;
+    int row = blockIdx.y * TILE_WIDTH + threadIdx.y;
+    
+    tile[threadIdx.y][threadIdx.x] = in_matrix[row*rowlen + col];
+    __syncthreads();
 
-    for (i = col; i < rowlen; i++)
-    {
-        row_index = (col * rowlen) + i;
-        col_index = (i * rowlen) + col;
-        temp = transpose_matrix[row_index];
-        transpose_matrix[row_index] = transpose_matrix[col_index];
-        transpose_matrix[col_index] = temp;
-    }
+    out_matrix[col*rowlen + row] = tile[threadIdx.y][threadIdx.x];
 }
 
 
@@ -183,6 +187,7 @@ int main(int argc, char *argv[])
   data_t *get_matrix_start(matrix_ptr m);
   
   long int i, j, k;
+  long int levels = 0;
   long int time_sec, time_ns;
   float t;
 
@@ -192,7 +197,9 @@ int main(int argc, char *argv[])
 
   // Arrays on GPU global memory
   data_t *FFT_gpu;
+  data_t *FFT_gpu_transpose;
   data_t *FFT_host;
+
 
 
 
@@ -201,7 +208,8 @@ int main(int argc, char *argv[])
   fft_matrix->len = SIZE;
   generate_sin_points_c(fft_matrix->data, SIZE*SIZE, SAMPLING_RATE, FREQUENCY);
 
-/*    printf("\n\n\nResult of GPU code\n");  
+/*
+    printf("\n\n\nResult of GPU code\n");  
     for(i = 0; i < SIZE; ++i){
         for (j = 0; j < SIZE; ++j){
         printf("%.2lf j%.2lf   ", cuCreal(fft_matrix->data[i*SIZE+j]), cuCimag(fft_matrix->data[i*SIZE+j]) );
@@ -209,6 +217,7 @@ int main(int argc, char *argv[])
         printf("\n");
     }
 */
+
 
   cuDoubleComplex *exptable = (cuDoubleComplex *) malloc((SIZE / 2) * sizeof(cuDoubleComplex));
   cuDoubleComplex *exptable_gpu;
@@ -228,12 +237,16 @@ int main(int argc, char *argv[])
   }
   //printf("\n\n\n\n\n");
 
+  for (i = SIZE; i > 1U; i >>= 1)
+		levels++;
+
   // Allocate CPU memory
   size_t allocSize = (SIZE*SIZE) * sizeof(cuDoubleComplex);
   size_t allocSize2 = (SIZE/2) * sizeof(cuDoubleComplex);
 
-  FFT_host       = (cuDoubleComplex *) malloc(allocSize);
-  FFT_gpu        = (cuDoubleComplex *) malloc(allocSize);
+  FFT_host          = (cuDoubleComplex *) malloc(allocSize);
+  FFT_gpu           = (cuDoubleComplex *) malloc(allocSize);
+  FFT_gpu_transpose = (cuDoubleComplex *) malloc(allocSize);
 
   // Select GPU
   CUDA_SAFE_CALL(cudaSetDevice(0));
@@ -252,20 +265,41 @@ int main(int argc, char *argv[])
 
   CUDA_SAFE_CALL(cudaMalloc((void **)&FFT_gpu, allocSize));
   CUDA_SAFE_CALL(cudaMalloc( (void **)&exptable_gpu, allocSize2 ));
+  CUDA_SAFE_CALL(cudaMalloc( (void **)&FFT_gpu_transpose, allocSize ));
+  
   CUDA_SAFE_CALL(cudaMemcpy(FFT_gpu,fft_matrix->data,allocSize,cudaMemcpyHostToDevice));
   CUDA_SAFE_CALL(cudaMemcpy(exptable_gpu,exptable,allocSize2,cudaMemcpyHostToDevice));
   
   // Launch the kernels to make 2D FFT happen!
 
+  int num_threads_y = 1;
+
+  while ( (BLOCK_SIZE * (SIZE / num_threads_y)) > 1024 )
+    num_threads_y <<= 1;
+   
+  printf("num per thread y is %d\n", num_threads_y);
+
   dim3 dimGrid(NUM_BLOCKS,1,1);
-  dim3 dimBlock(SIZE/NUM_BLOCKS,1,1);
+  dim3 dimBlock(BLOCK_SIZE,SIZE/num_threads_y,1);
+
+  dim3 dimGrid2(SIZE/TILE_WIDTH,SIZE/TILE_WIDTH,1);
+  dim3 dimBlock2(TILE_WIDTH,TILE_WIDTH,1);
 
   cudaEventRecord(start2, 0);
+
+  kernel_FFT <<<dimGrid, dimBlock>>>(SIZE, exptable_gpu, FFT_gpu, num_threads_y);
+  CUDA_SAFE_CALL(cudaPeekAtLastError());
   
-  kernel_FFT <<<dimGrid, dimBlock>>>(SIZE, exptable_gpu, FFT_gpu);
-  kernel_InPlaceTranspose <<<dimGrid, dimBlock>>>(SIZE, FFT_gpu);
-  kernel_FFT <<<dimGrid, dimBlock>>>(SIZE, exptable_gpu, FFT_gpu);
-  kernel_InPlaceTranspose <<<dimGrid, dimBlock>>>(SIZE, FFT_gpu);
+  kernel_Transpose <<<dimGrid2, dimBlock2>>>(SIZE, FFT_gpu, FFT_gpu_transpose);
+  CUDA_SAFE_CALL(cudaPeekAtLastError());
+  
+
+  kernel_FFT <<<dimGrid, dimBlock>>>(SIZE, exptable_gpu, FFT_gpu_transpose, num_threads_y);
+  CUDA_SAFE_CALL(cudaPeekAtLastError());
+  
+  kernel_Transpose <<<dimGrid2, dimBlock2>>>(SIZE, FFT_gpu_transpose, FFT_gpu);
+  CUDA_SAFE_CALL(cudaPeekAtLastError());
+
 
   cudaEventRecord(stop2, 0);
   cudaEventSynchronize(stop2);
@@ -275,8 +309,9 @@ int main(int argc, char *argv[])
   CUDA_SAFE_CALL(cudaPeekAtLastError());
   CUDA_SAFE_CALL(cudaMemcpy(FFT_host,FFT_gpu,allocSize,cudaMemcpyDeviceToHost));
 
-
+  CUDA_SAFE_CALL(cudaFree(FFT_gpu_transpose));
   CUDA_SAFE_CALL(cudaFree(FFT_gpu));
+  CUDA_SAFE_CALL(cudaFree(exptable_gpu));
   
   // Stop and destroy the timer
   cudaEventRecord(stop,0);
@@ -288,10 +323,9 @@ int main(int argc, char *argv[])
   cudaEventDestroy(start2);
   cudaEventDestroy(stop2);
 
-/*
-printf("\n\n\nResult of GPU code\n");  
-    for(i = 0; i < SIZE; ++i){
-        for (j = 0; j < SIZE; ++j){
+/*printf("\n\n\nResult of GPU code\n");  
+    for(i = 4500; i < 4628; ++i){
+        for (j = 4500; j < 4628; ++j){
         printf("%.2lf j%.2lf,   ", cuCreal(FFT_host[i*SIZE+j]), cuCimag(FFT_host[i*SIZE+j]) );
         }
         printf("\n");
