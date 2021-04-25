@@ -1,6 +1,6 @@
 #include <math.h>
 #include <stdio.h>
-#include <complex.h>
+#include <complex.h>_mm_load_ps
 #include <immintrin.h>
 
 // gcc 2dfft.c -o 2dfft -w -mavx -lm && ./2dfft
@@ -23,22 +23,31 @@ void fft_1D(int x[], int X[], int N){
 	int i,j,k;
 	for (int r = 0; r < N; r++) {
 		int r_even = r;
-		int r_odd = r + 1;
-		
+		int r_odd = r + 1;	
 	}
 
 }
 
 
 int main(){
-	int x[] = {1,2,3,4};
-	int r = (big_n / RADIX) - 1;
-	int X[r];
-	fft_1D(x, X, big_n);
+	//int x[] = {1,2,3,4};
+	//int r = (big_n / RADIX) - 1;
+	//int X[r];
+	//fft_1D(x, X, big_n);
 
-	double complex *twiddle_factors = malloc((big_n) * sizeof(double complex));
-	generate_twiddle_factors(twiddle_factors, big_n, 0);
+	//double complex *twiddle_factors = malloc((big_n) * sizeof(double complex));
+	//generate_twiddle_factors(twiddle_factors, big_n, 0);
 
+	int i, j;
+	float arr[7] = {1.1,2.2,3.3,4.4,5.5,6.6,7.7};
+
+	float *ptr = arr;
+
+	__m128 row0;
+
+	for (i = 0; i < 1; i += 1) {
+		row0 = _mm_load_ps(arr + i);
+	}
 
 	return 0;
 }
