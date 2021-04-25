@@ -34,21 +34,32 @@ using namespace std;
 // /	return sine_wave;
 //}
 
-__m256 generate_sine_wave(int freq, int periods, int len){
+// https://stackoverflow.com/questions/45554873/using-values-from-m256i-to-access-an-array-efficiently-simd/45555691
+// https://software.intel.com/content/www/us/en/develop/documentation/cpp-compiler-developer-guide-and-reference/top/compiler-reference/intrinsics/intrinsics-for-intel-advanced-vector-extensions/intrinsics-for-miscellaneous-operations-3/mm256-set-epi8-16-32-64x.html
+
+void generate_sine_wave(float y[], int freq, int periods, int len){
 	int i,j;
 	float * sin_x = new (std::align_val_t(32)) float[len];
 	float * sin_y = new (std::align_val_t(32)) float[len];
 	float samples = 2 * PI * periods * freq;
 	
-	for (i = 0; i < len; i++){
-		float x = (float) (i/freq);
-		sin_y[i * sizeof(float)] = sin(x);
-	//	sin_x[i * sizeof(float)] = sin(x);
-		//cout << a[i * sizeof(float)] << " ";
-	}
-	__m256 y = _mm256_load_ps(sin_y);
 	
-	return y;
+	for (i = 0; i < len; i++){
+		float x = ((float) i)/freq;
+//		cout << x << " : " << sin(x) << endl;
+//		sin_y[i * sizeof(float)] = sin(x);
+		//sin_y[i] = sin(x);
+		const float res = sin(x);
+		y[i] = res;
+		//_mm256_store_ps()
+		//y[i * sizeof(float)] = _mm256_load_ps(&res);
+		//cout << a[i * sizeof(float)] << " ";
+		//cout << sin_y[i] << endl;
+	}
+	//__m256 y = _mm256_load_ps(sin_y);
+
+	//_mm256_store_ps(sin_y, y);
+//	return y;
 
 }
 
@@ -56,9 +67,9 @@ static size_t reverse_bits(size_t val, int width) {
 	size_t result = 0;
 	int i;
 	for (i = 0; i < width; i++, val >>= 1)
-		result =  result( << 1 ) | (val & IU);
+		result =  (result << 1 ) | (val & 1U);
 	return result;
-	
+
 }
 __m256 avx_fft(__m256 inp, size_t n, bool inverse, __m256 exptable_re, __m256 exptable_im){
 	size_t temp, i, j, size, k, m;
@@ -71,10 +82,29 @@ int main(){
 	int freq = 10;
 	int periods = 1;
 	int len = (int) 2 * PI * periods * freq;
+	//__m256 y[len];
+	float y[len];
+	//__m256 wave = generate_sine_wave(y,freq, periods, len);
 
-	__m256 wave = generate_sine_wave(freq, periods, len);
+	generate_sine_wave(y,freq, periods, len);
 
+	float * fWave = new (std::align_val_t(32)) float[len];
 
+//	_mm256_store_ps(fWave, y);
+	for (int i = 0; i < len; i++) 
+			{
+				//cout << ((float)i)/freq << " : " << fWave[i] << endl;
+				cout << y[i] << endl;
+		
+	}
+	cout << endl;
+	int indices[8] = {0,1,2,3,4,5,6,7};
+
+	//__m256i ind = _mm256_set_epi32(0,1,2,3,4,5,6,7);
+	//__m256 result = _mm256_i32gather_ps(wave, ind, 4);
+
+	//__mm256 index = 
+	size_t n = len * len;
 	int levels = 0;
 	size_t temp, i, j, size, k, m;
 
@@ -89,9 +119,16 @@ int main(){
 
 	for (m = 0; m < n; m++){
 		for (i = 0; i < n; i++) {
-			size_t j = reverse
+			size_t j = reverse_bits(i, levels);
+
+			if (j > 1) {
+				i_index = m * n + i;
+				j_index = m * n + j;
+				//__m256 temp = __mm256_load_ps()
+			}
 		}
 	}
+
 
 	return 0;
 }
