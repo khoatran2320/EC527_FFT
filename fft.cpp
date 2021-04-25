@@ -6,7 +6,8 @@
 #define PI 3.14159265358979323846
 #define PERIODS 1
 #define FREQ	100
-
+using namespace std;
+// g++ fft.cpp -o fft_cpp -w -lm -mavx2 -std=c++17 && ./fft_cpp 
 // https://www.alcf.anl.gov/files/ken_intel_compiler_optimization.pdf
 
 //__m256d generate_sine_wave(float periods, float freq){
@@ -33,7 +34,21 @@
 //}
 
 int main(){
-	float a[] = {1.1,2.2,3.3};
-	__m256 _mm256_loadu_ps((__m256 *)*a);
+	int i,j;
+	float * a = new (std::align_val_t(32)) float[3];//{1.1,2.2,3.3};
+	for (i = 0; i < 3; i++){
+		a[i * sizeof(float)] = 1.1;
+		cout << a[i * sizeof(float)] << " ";
+	}
+	cout << endl;
+	int freq = 100;
+	int periods = 1;
+	int len = 3;//int) (2 * PI * periods * freq) + 1;
+	__m256 sin_x[len];
+//	//for (i = 0; i < len; i++){
+	//	float  f = 1.1;
+		float* fp_ptr = a;
+		_mm256_store_ps(a, sin_x[0]);
+//	//}
 	return 0;
 }
