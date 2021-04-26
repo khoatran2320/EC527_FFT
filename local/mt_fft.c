@@ -6,7 +6,7 @@
 # include "apple_pthread_barrier.h"
 #endif /* __APPLE__ */
 #define NUM_THREADS 3
-#define SIZE 4096
+#define SIZE 128
 
 #include "string.h"
 
@@ -244,22 +244,22 @@ int main(int argc, char **argv){
 
 	// //For 2D, need to do FFT, then transpose, then do FFT again, then transpose back.
     
-	// print_matlab(inp, SIZE);
-    // printf("\n");
-    // printf("\n");
-    // printf("\n");
+	print_matlab(inp, SIZE);
+    printf("\n");
+    printf("\n");
+    printf("\n");
 	clock_gettime(CLOCK_PROCESS_CPUTIME_ID, &time_start);
     bool ret = mtfft(inp, n, exptable);
 	clock_gettime(CLOCK_PROCESS_CPUTIME_ID, &time_stop);
 
-    // printf("\n");
-    // printf("\n");
-    // printf("\n");
-    // printf("\n");
-    // print_matlab(inp, SIZE);
-    // printf("\n");
+    printf("\n");
+    printf("\n");
+    printf("\n");
+    printf("\n");
+    print_matlab(inp, SIZE);
+    printf("\n");
 
-    // printf("\n");
+    printf("\n");
 
 	printf("Time for FFT was: %.9f\n\n", interval(time_start, time_stop));
     return 0;

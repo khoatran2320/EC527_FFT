@@ -6,7 +6,7 @@ fft2d: fft2d.c
 	gcc -std=c99 fft2d.c -lm -o fft2d 
 
 mtfft: mt_fft.c
-	gcc -std=gnu99 mt_fft.c  -lm -pthread -o mtfft
+	gcc -std=gnu99 mt_fft.c  -fopenmp -lm -pthread -o mtfft
 
 mtfft2: mtfft2.c
 	gcc -O3 -std=gnu99 mtfft2.c  -lm -pthread -o mtfft2

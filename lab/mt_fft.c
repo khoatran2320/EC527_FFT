@@ -2,8 +2,6 @@
 #include "fft_lib.h"
 #include <pthread.h>
 #include <stdint.h>
-#define NUM_THREADS 2
-#define SIZE 8192
 #include <sys/time.h>
 #include "string.h"
 #ifdef __APPLE__
@@ -11,6 +9,16 @@
 # include "apple_pthread_barrier.h"
 #endif /* __APPLE__ */
 #include <omp.h>
+
+#define NUM_THREADS 8
+#define SIZE 8192
+#define PRINT_INPUT 0
+#define PRINT_OUTPUT 0
+#define USE_RAND_SEARCH 1
+#define USE_MT_TRANSPOSE 1
+#define BLOCK_SIZE 128
+#define COPY_ROW 1
+#define FFT2D 0
 
 static inline int rand_int(int lower, int upper)
 {
@@ -118,7 +126,6 @@ void transpose_matrix(double complex *in, unsigned long N){
 	int i;
 	int j;
 	double complex temp;
-    // #pragma omp parallel for private(temp, N) shared(in, i, j)
 	for (i = 0; i < N-1; i++)
 	{
 		for (j=i+1; j < N; j++)
@@ -170,46 +177,54 @@ void * start_routine(void *arg){
     double complex *exp = info->exp;
     double complex *v = info->v;
     size_t n = info->n;
-    // printf("%ld\n", n);
-    // pthread_mutex_lock(&print_m);
-    // printf("\n");
-    // printf("\n");
-    // printf("\n");
-    // print_matlab(v, n);
-    // pthread_mutex_unlock(&print_m);
 
     pthread_mutex_lock(&bitmap_mut);
     while(!is_full(rows_bitmap)){
+
+        #if USE_RAND_SEARCH
         int i = find_free_bit_d(rows_bitmap, rand_int(0, n-1), rand_int(0,1));
-        // int i = find_free_bit(rows_bitmap);
+        #else
+        int i = find_free_bit(rows_bitmap);
+        #endif /* USE_RAND_SEARCH */
+
+
         if(i == -1){
             printf("Invalid free row\n");
             break;
         }
         rows_bitmap[i] = true;
-        // printf("\nthread %ld doing row %d\n", pthread_self(), i);
         pthread_mutex_unlock(&bitmap_mut);
-        double complex arr[n];
-        memcpy(arr, v+i*n, sizeof(double complex)*n);
-        if(!fft_r2(arr, n, exp)){
-            printf("failed\n");
-        }
-        memcpy(v+i*n, arr, sizeof(double complex)*n);
+
+        #if COPY_ROW
+            double complex arr[n];
+            memcpy(arr, v+i*n, sizeof(double complex)*n);
+            if(!fft_r2(arr, n, exp)){
+                printf("failed\n");
+            }
+            memcpy(v+i*n, arr, sizeof(double complex)*n);
+
+        #else 
+            if(!fft_r2(v+i*n, n, exp)){
+                printf("failed\n");
+            }
+        #endif /* COPY_ROW */
+
         pthread_mutex_lock(&bitmap_mut);
     }
     pthread_mutex_unlock(&bitmap_mut);
 
     pthread_barrier_wait(&bar);
+
     pthread_mutex_lock(&do_transpose);
-    if(!is_tranposed){
-        struct timespec time_start, time_stop;
-        // clock_gettime(CLOCK_PROCESS_CPUTIME_ID, &time_start);
-        // double complex *temp = (double complex *)malloc(sizeof(double complex) * SIZE * SIZE );
-        transpose_matrix(v, n);
-        // transpose_block(v, temp, n, n, n, n, 4);
+    double complex *temp = (double complex *)malloc(sizeof(double complex) * SIZE * SIZE );
+    if(!is_tranposed){  
+        #if USE_MT_TRANSPOSE
+        transpose_block(v, temp, n, n, n, n, BLOCK_SIZE);
         // memcpy(v, temp, sizeof(double complex) * SIZE * SIZE );
-        // clock_gettime(CLOCK_PROCESS_CPUTIME_ID, &time_stop);
-        // printf("Time for tranpose was: %.6f\n\n", interval(time_start, time_stop));
+        #else 
+        transpose_matrix(v, n);
+        #endif /* USE_MT_TRANSPOSE */
+
         is_tranposed = true;
     }
     pthread_mutex_unlock(&do_transpose);
@@ -227,21 +242,40 @@ void * start_routine(void *arg){
 
     pthread_mutex_lock(&bitmap_mut);
     while(!is_full(rows_bitmap)){
+
+        #if USE_RAND_SEARCH
         int i = find_free_bit_d(rows_bitmap, rand_int(0, n-1), rand_int(0,1));
-        // int i = find_free_bit(rows_bitmap);
-        // printf("\n\n\nthread %ld doing row %d\n", pthread_self(), i);
+        #else
+        int i = find_free_bit(rows_bitmap);
+        #endif /* USE_RAND_SEARCH */
+
         if(i == -1){
             printf("Invalid free row\n");
             break;
         }
         rows_bitmap[i] = true;
         pthread_mutex_unlock(&bitmap_mut);
-        double complex arr[n];
-        memcpy(arr, v+i*n, sizeof(double complex)*n);
-        if(!fft_r2(arr, n, exp)){
-            printf("failed\n");
-        }
-        memcpy(v+i*n, arr, sizeof(double complex)*n);
+
+        #if COPY_ROW
+            double complex arr[n];
+            memcpy(arr, v+i*n, sizeof(double complex)*n);
+            if(!fft_r2(arr, n, exp)){
+                printf("failed\n");
+            }
+            memcpy(v+i*n, arr, sizeof(double complex)*n);
+
+        #else 
+            #if USE_MT_TRANSPOSE
+            if(!fft_r2(temp+i*n, n, exp)){
+                printf("failed\n");
+            }
+            #else
+            if(!fft_r2(v+i*n, n, exp)){
+                printf("failed\n");
+            }
+            #endif
+        #endif /* COPY_ROW */
+
         pthread_mutex_lock(&bitmap_mut);
     }
     pthread_mutex_unlock(&bitmap_mut);
@@ -250,10 +284,15 @@ void * start_routine(void *arg){
     pthread_barrier_wait(&bar);
     pthread_mutex_lock(&do_transpose2);
     if(!is_tranposed2){
+
+        #if USE_MT_TRANSPOSE
         // double complex *temp = (double complex *)malloc(sizeof(double complex) * SIZE * SIZE );
-        transpose_matrix(v, n);
-        // transpose_block(v, temp, n, n, n, n, 4);
+        transpose_block(temp, v, n, n, n, n, BLOCK_SIZE);
         // memcpy(v, temp, sizeof(double complex) * SIZE * SIZE );
+        #else 
+        transpose_matrix(v, n);
+        #endif /* USE_MT_TRANSPOSE */
+
         is_tranposed2 = true;
     }
     pthread_mutex_unlock(&do_transpose2);
@@ -274,10 +313,7 @@ bool mtfft(double complex *vec, size_t width, double complex *exptable){
     }
 
 
-    // printf("%ld\n", width);
     struct args arg = (struct args){.exp = exptable, .v = vec, .n = width};
-    // printf("%ld\n", arg.n);
-    // print_matlab(arg.v, arg.n);
 
     for(int i = 0; i < NUM_THREADS; ++i){
         if(pthread_create(&tid[i], NULL, start_routine, (void*)&arg)){
@@ -310,7 +346,33 @@ int main(int argc, char **argv){
 
     struct timespec time_start, time_stop;
     
-	printf("SIZE by SIZE is: %d\n", SIZE * SIZE);
+
+    printf("SIZE by SIZE is: %d\n", SIZE * SIZE);
+
+    #if FFT2D
+    printf("Doing serial 2D FFT\n");
+    #else 
+    printf("Doing multi-threaded 2D FFT using %d threads\n", NUM_THREADS);
+    #if USE_MT_TRANSPOSE
+    printf("Using multi-threaded transpose with block size %d\n", BLOCK_SIZE);
+    #else 
+    printf("Using serial transpose\n");
+    #endif /* USE_MT_TRANSPOSE */
+
+    #if USE_RAND_SEARCH
+    printf("Each thread randomly searches for a free row to compute 1D FFT\n");
+    #else
+    printf("Each thread linearly searches for a free row to compute 1D FFT\n");
+    #endif /* USE_RAND_SEARCH */
+
+
+    #if COPY_ROW
+    printf("Each thread is copying a row locally before 1D FFT computation\n");
+    #endif /* COPY_ROW */
+    #endif /* FFT2D */
+
+
+
 
 	//Generating a matrix of values to do FFT on
     generate_sin_points_c(inp, SIZE * SIZE, SAMPLING_RATE, FREQUENCY);
@@ -328,30 +390,32 @@ int main(int argc, char **argv){
 
 	// //For 2D, need to do FFT, then transpose, then do FFT again, then transpose back.
 
-	// print_matlab(inp, SIZE);
-    // printf("\n");
-    // printf("\n");
-    // printf("\n");
-	// clock_gettime(CLOCK_PROCESS_CPUTIME_ID, &time_start);
+    #if PRINT_INPUT
+	print_matlab(inp, SIZE);
+    printf("\n");
+    printf("\n");
+    printf("\n");
+    #endif /* PRINT_INPUT */
 
-    clock_t start = clock(), diff;
+	clock_gettime(CLOCK_REALTIME, &time_start);
+    #if FFT2D 
+    bool ret = fft2d(inp, n, exptable);
+    #else
     bool ret = mtfft(inp, n, exptable);
-    diff = clock() - start;
-	// clock_gettime(CLOCK_PROCESS_CPUTIME_ID, &time_stop);
+    #endif /* FFT2D */
+	clock_gettime(CLOCK_REALTIME, &time_stop);
 
+    #if PRINT_OUTPUT 
+    printf("\n");
+    printf("\n");
+    printf("\n");
+    printf("\n");
+    print_matlab(inp, SIZE);
+    printf("\n");
+    printf("\n");
+    #endif /* PRINT_OUTPUT */
 
-    int msec = diff * 1000 / CLOCKS_PER_SEC;
-    printf("Time taken %d seconds %d milliseconds", msec/1000, msec%1000);
-    // printf("\n");
-    // printf("\n");
-    // printf("\n");
-    // printf("\n");
-    // print_matlab(inp, SIZE);
-    // printf("\n");
-
-    // printf("\n");
-
-	// printf("Time for FFT was: %.6lf\n\n", interval(time_start, time_stop));
+	printf("\nTime for FFT was: %.6lf\n\n", interval(time_start, time_stop));
     return 0;
 }
 

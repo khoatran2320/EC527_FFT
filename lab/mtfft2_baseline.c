@@ -2,7 +2,7 @@
 #include "fft_lib.h"
 #include <pthread.h>
 #include <stdint.h>
-#define NUM_THREADS 3
+#define NUM_THREADS 8
 #define SIZE 8192
 #include <sys/time.h>
 #include "string.h"
