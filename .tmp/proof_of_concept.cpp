@@ -53,10 +53,21 @@ void proof_of_concept(){
 //	for (int i = 0; i < len; i++) cout << a_float[i] << endl;
 
 
+	for (int size = 2; size <= 8; size *= 2) {
+		size_t halfsize = size/2;
+		size_t tablestep = n/size;
+
+		for (int p = 0; p < n; p += size) {
+			for (int q = p, r = 0; j < j + halfsize; j++, k += tablestep) {
+				size_t l = q + halfsize; 
+			}
+		}
+	}
 	__m256 a = _mm256_load_ps(a_float);
 	__m256 b = _mm256_load_ps(b_float);
 	__m256 c = _mm256_sub_ps(b,a);
-
+	__m256 d = _mm256_mul_ps(b,a);
+	__m256 e = _mm256_add_ps(b,a);
 	blocks[0] = c;
 	float * c_float = new (std::align_val_t(32)) float[8];	
 
