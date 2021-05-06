@@ -154,7 +154,6 @@ bool fft2d(double complex *vec, size_t width, double complex *exptable){
 }
 
 pthread_mutex_t bitmap_mut;
-pthread_mutex_t print_m;
 pthread_mutex_t do_transpose;
 pthread_mutex_t do_transpose2;
 pthread_mutex_t clear_bitmap;
@@ -180,13 +179,11 @@ void * start_routine(void *arg){
 
     pthread_mutex_lock(&bitmap_mut);
     while(!is_full(rows_bitmap)){
-
         #if USE_RAND_SEARCH
         int i = find_free_bit_d(rows_bitmap, rand_int(0, n-1), rand_int(0,1));
         #else
         int i = find_free_bit(rows_bitmap);
         #endif /* USE_RAND_SEARCH */
-
 
         if(i == -1){
             printf("Invalid free row\n");
@@ -216,11 +213,11 @@ void * start_routine(void *arg){
     pthread_barrier_wait(&bar);
 
     pthread_mutex_lock(&do_transpose);
-    double complex *temp = (double complex *)malloc(sizeof(double complex) * SIZE * SIZE );
     if(!is_tranposed){  
         #if USE_MT_TRANSPOSE
+        double complex *temp = (double complex *)malloc(sizeof(double complex) * n * n );
         transpose_block(v, temp, n, n, n, n, BLOCK_SIZE);
-        // memcpy(v, temp, sizeof(double complex) * SIZE * SIZE );
+        memcpy(v, temp, sizeof(double complex) * n * n );
         #else 
         transpose_matrix(v, n);
         #endif /* USE_MT_TRANSPOSE */
@@ -265,34 +262,25 @@ void * start_routine(void *arg){
             memcpy(v+i*n, arr, sizeof(double complex)*n);
 
         #else 
-            #if USE_MT_TRANSPOSE
-            if(!fft_r2(temp+i*n, n, exp)){
-                printf("failed\n");
-            }
-            #else
             if(!fft_r2(v+i*n, n, exp)){
                 printf("failed\n");
             }
-            #endif
         #endif /* COPY_ROW */
 
         pthread_mutex_lock(&bitmap_mut);
     }
     pthread_mutex_unlock(&bitmap_mut);
 
-
     pthread_barrier_wait(&bar);
     pthread_mutex_lock(&do_transpose2);
     if(!is_tranposed2){
-
         #if USE_MT_TRANSPOSE
-        // double complex *temp = (double complex *)malloc(sizeof(double complex) * SIZE * SIZE );
-        transpose_block(temp, v, n, n, n, n, BLOCK_SIZE);
-        // memcpy(v, temp, sizeof(double complex) * SIZE * SIZE );
+        double complex *temp = (double complex *)malloc(sizeof(double complex) * n * n );
+        transpose_block(v, temp, n, n, n, n, BLOCK_SIZE);
+        memcpy(v, temp, sizeof(double complex) * n * n);
         #else 
         transpose_matrix(v, n);
         #endif /* USE_MT_TRANSPOSE */
-
         is_tranposed2 = true;
     }
     pthread_mutex_unlock(&do_transpose2);
@@ -306,7 +294,6 @@ bool mtfft(double complex *vec, size_t width, double complex *exptable){
     pthread_mutex_init(&do_transpose,  NULL);
     pthread_mutex_init(&do_transpose2,  NULL);
     pthread_mutex_init(&clear_bitmap,  NULL);
-    pthread_mutex_init(&print_m,  NULL);
     pthread_barrier_init(&bar, NULL, NUM_THREADS);
     for(int i = 0; i < SIZE; ++i){
         rows_bitmap[i] = false;
@@ -388,7 +375,6 @@ int main(int argc, char **argv){
 	for (i = 0; i < n / 2; i++)
 		exptable[i] = cexp(-2 * M_PI * i / n * I);
 
-	// //For 2D, need to do FFT, then transpose, then do FFT again, then transpose back.
 
     #if PRINT_INPUT
 	print_matlab(inp, SIZE);
@@ -397,13 +383,13 @@ int main(int argc, char **argv){
     printf("\n");
     #endif /* PRINT_INPUT */
 
-	clock_gettime(CLOCK_REALTIME, &time_start);
+	clock_gettime(CLOCK_MONOTONIC_RAW, &time_start);
     #if FFT2D 
     bool ret = fft2d(inp, n, exptable);
     #else
     bool ret = mtfft(inp, n, exptable);
     #endif /* FFT2D */
-	clock_gettime(CLOCK_REALTIME, &time_stop);
+	clock_gettime(CLOCK_MONOTONIC_RAW, &time_stop);
 
     #if PRINT_OUTPUT 
     printf("\n");
@@ -415,7 +401,7 @@ int main(int argc, char **argv){
     printf("\n");
     #endif /* PRINT_OUTPUT */
 
-	printf("\nTime for FFT was: %.6lf\n\n", interval(time_start, time_stop));
+	printf("\nTime for FFT was: %.9lf\n\n", interval(time_start, time_stop));
     return 0;
 }
 
