@@ -21,8 +21,9 @@
 
 #define TILE_WIDTH 32
 #define SIZE 8192
-#define BLOCK_SIZE (SIZE / 8192)
-#define NUM_BLOCKS 8192
+#define BLOCK_SIZE (SIZE / 8)
+#define NUM_BLOCKS2 1024
+#define NUM_BLOCKS 8
 #define SAMPLING_RATE 100
 #define FREQUENCY 2
 
@@ -138,7 +139,25 @@ __global__ void kernel_FFT (int rowlen, cuDoubleComplex * exptable, cuDoubleComp
 }
 
 
+//My CUDA function for matrix transpose (in place)
+__global__ void kernel_InPlaceTranspose (int rowlen, cuDoubleComplex * transpose_matrix) {
 
+    int col = blockIdx.x * (rowlen / gridDim.x) + threadIdx.x;
+    int i;
+    cuDoubleComplex temp;
+
+    int row_index;
+    int col_index;
+
+    for (i = col; i < rowlen; i++)
+    {
+        row_index = (col * rowlen) + i;
+        col_index = (i * rowlen) + col;
+        temp = transpose_matrix[row_index];
+        transpose_matrix[row_index] = transpose_matrix[col_index];
+        transpose_matrix[col_index] = temp;
+    }
+}
 
 
 
@@ -265,7 +284,7 @@ int main(int argc, char *argv[])
 
   CUDA_SAFE_CALL(cudaMalloc((void **)&FFT_gpu, allocSize));
   CUDA_SAFE_CALL(cudaMalloc( (void **)&exptable_gpu, allocSize2 ));
-  CUDA_SAFE_CALL(cudaMalloc( (void **)&FFT_gpu_transpose, allocSize ));
+  //CUDA_SAFE_CALL(cudaMalloc( (void **)&FFT_gpu_transpose, allocSize ));
   
   CUDA_SAFE_CALL(cudaMemcpy(FFT_gpu,fft_matrix->data,allocSize,cudaMemcpyHostToDevice));
   CUDA_SAFE_CALL(cudaMemcpy(exptable_gpu,exptable,allocSize2,cudaMemcpyHostToDevice));
@@ -282,22 +301,25 @@ int main(int argc, char *argv[])
   dim3 dimGrid(NUM_BLOCKS,1,1);
   dim3 dimBlock(BLOCK_SIZE,SIZE/num_threads_y,1);
 
-  dim3 dimGrid2(SIZE/TILE_WIDTH,SIZE/TILE_WIDTH,1);
-  dim3 dimBlock2(TILE_WIDTH,TILE_WIDTH,1);
+  dim3 dimGrid2(NUM_BLOCKS2,1,1);
+  dim3 dimBlock2(SIZE/NUM_BLOCKS2,1,1);
 
   cudaEventRecord(start2, 0);
 
   kernel_FFT <<<dimGrid, dimBlock>>>(SIZE, exptable_gpu, FFT_gpu, num_threads_y);
   CUDA_SAFE_CALL(cudaPeekAtLastError());
   
-  kernel_Transpose <<<dimGrid2, dimBlock2>>>(SIZE, FFT_gpu, FFT_gpu_transpose);
+  //kernel_Transpose <<<dimGrid2, dimBlock2>>>(SIZE, FFT_gpu, FFT_gpu_transpose);
+  kernel_InPlaceTranspose <<<dimGrid2, dimBlock2>>> (SIZE, FFT_gpu);
   CUDA_SAFE_CALL(cudaPeekAtLastError());
   
 
-  kernel_FFT <<<dimGrid, dimBlock>>>(SIZE, exptable_gpu, FFT_gpu_transpose, num_threads_y);
+  kernel_FFT <<<dimGrid, dimBlock>>>(SIZE, exptable_gpu, FFT_gpu, num_threads_y);
   CUDA_SAFE_CALL(cudaPeekAtLastError());
   
-  kernel_Transpose <<<dimGrid2, dimBlock2>>>(SIZE, FFT_gpu_transpose, FFT_gpu);
+  //kernel_Transpose <<<dimGrid2, dimBlock2>>>(SIZE, FFT_gpu_transpose, FFT_gpu);
+  kernel_InPlaceTranspose <<<dimGrid2, dimBlock2>>> (SIZE, FFT_gpu);
+
   CUDA_SAFE_CALL(cudaPeekAtLastError());
 
 
@@ -309,7 +331,7 @@ int main(int argc, char *argv[])
   CUDA_SAFE_CALL(cudaPeekAtLastError());
   CUDA_SAFE_CALL(cudaMemcpy(FFT_host,FFT_gpu,allocSize,cudaMemcpyDeviceToHost));
 
-  CUDA_SAFE_CALL(cudaFree(FFT_gpu_transpose));
+  //CUDA_SAFE_CALL(cudaFree(FFT_gpu_transpose));
   CUDA_SAFE_CALL(cudaFree(FFT_gpu));
   CUDA_SAFE_CALL(cudaFree(exptable_gpu));
   
@@ -323,13 +345,14 @@ int main(int argc, char *argv[])
   cudaEventDestroy(start2);
   cudaEventDestroy(stop2);
 
-/*printf("\n\n\nResult of GPU code\n");  
-    for(i = 4500; i < 4628; ++i){
-        for (j = 4500; j < 4628; ++j){
-        printf("%.2lf j%.2lf,   ", cuCreal(FFT_host[i*SIZE+j]), cuCimag(FFT_host[i*SIZE+j]) );
+    printf("[");
+/*    for(i = 0; i < SIZE; ++i){
+        for (j = 0; j < SIZE; ++j){
+        printf("%.2lf + %.2lfi,   ", cuCreal(FFT_host[i*SIZE+j]), cuCimag(FFT_host[i*SIZE+j]) );
         }
-        printf("\n");
+        printf(";\n");
     }
+    printf("];");
 */
 
 }/* end main */

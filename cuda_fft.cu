@@ -21,8 +21,8 @@
 
 #define TILE_WIDTH 32
 #define SIZE 8192
-#define BLOCK_SIZE (SIZE / 8)
-#define NUM_BLOCKS 8
+#define BLOCK_SIZE (SIZE / 256)
+#define NUM_BLOCKS 256
 #define SAMPLING_RATE 100
 #define FREQUENCY 2
 
@@ -288,16 +288,17 @@ int main(int argc, char *argv[])
   cudaEventDestroy(start2);
   cudaEventDestroy(stop2);
 
-/*
-printf("\n\n\nResult of GPU code\n");  
+
+//printf("\n\n\nResult of GPU code\n");  
+/*    printf("[");
     for(i = 0; i < SIZE; ++i){
         for (j = 0; j < SIZE; ++j){
-        printf("%.2lf j%.2lf,   ", cuCreal(FFT_host[i*SIZE+j]), cuCimag(FFT_host[i*SIZE+j]) );
+        printf("%.2lf + %.2lfi,   ", cuCreal(FFT_host[i*SIZE+j]), cuCimag(FFT_host[i*SIZE+j]) );
         }
-        printf("\n");
+        printf(";\n");
     }
+    printf("];");
 */
-
 }/* end main */
 
 
